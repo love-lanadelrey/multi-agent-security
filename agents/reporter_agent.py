@@ -1,4 +1,7 @@
-"""Reporter Agent - generates security reports."""
+"""Reporter Agent - generates security reports.
+
+注册为 MCP 工具，支持其他 Agent 调用。
+"""
 
 import json
 from datetime import datetime
@@ -9,14 +12,38 @@ from .base_agent import BaseAgent, AgentMessage
 class ReporterAgent(BaseAgent):
     """Agent responsible for generating security reports."""
     
-    def __init__(self):
-        super().__init__(name="ReporterAgent")
+    def __init__(self, mcp_registry=None, mcp_context=None):
+        super().__init__(name="ReporterAgent", mcp_registry=mcp_registry, mcp_context=mcp_context)
+        
+        # 注册报告工具
+        self._register_report_tools()
+    
+    def _register_report_tools(self) -> None:
+        """注册报告生成相关工具。"""
+        self.register_tool(
+            name="reporter.generate_report",
+            handler=self.generate_report,
+            description="Generate structured security report from analysis results",
+            tags=["security", "report"],
+        )
+        self.register_tool(
+            name="reporter.format_text",
+            handler=self.format_text_report,
+            description="Format security report as human-readable text",
+            tags=["report", "format"],
+        )
+        self.register_tool(
+            name="reporter.format_json",
+            handler=self.format_json_report,
+            description="Format security report as JSON",
+            tags=["report", "format", "json"],
+        )
     
     def process(self, message: AgentMessage) -> AgentMessage:
         """Generate security report from analysis."""
         content = message.content
         
-        report = self._generate_report(content)
+        report = self.generate_report(content)
         
         return self.send(
             receiver="orchestrator",
@@ -27,8 +54,8 @@ class ReporterAgent(BaseAgent):
             }
         )
     
-    def _generate_report(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate structured security report."""
+    def generate_report(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate structured security report. (MCP Tool)"""
         analysis = data.get("analysis", {})
         findings = data.get("findings", {})
         recommendations = data.get("recommendations", [])
@@ -37,7 +64,7 @@ class ReporterAgent(BaseAgent):
             "metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "agent": "Multi-Agent Security System",
-                "version": "1.0.0",
+                "version": "2.0.0",
             },
             "summary": {
                 "total_vulnerabilities": analysis.get("total_vulnerabilities", 0),
@@ -56,7 +83,7 @@ class ReporterAgent(BaseAgent):
         return report
     
     def format_text_report(self, report: Dict[str, Any]) -> str:
-        """Format report as human-readable text."""
+        """Format report as human-readable text. (MCP Tool)"""
         lines = [
             "=" * 60,
             "SECURITY ANALYSIS REPORT",
@@ -83,3 +110,7 @@ class ReporterAgent(BaseAgent):
         lines.append("\n" + "=" * 60)
         
         return "\n".join(lines)
+    
+    def format_json_report(self, report: Dict[str, Any]) -> str:
+        """Format report as JSON string. (MCP Tool)"""
+        return json.dumps(report, indent=2, ensure_ascii=False)

@@ -1,4 +1,7 @@
-"""Analyzer Agent - analyzes threats and assesses risk."""
+"""Analyzer Agent - analyzes threats and assesses risk.
+
+注册为 MCP 工具，支持其他 Agent 调用。
+"""
 
 from typing import Any, Dict, List
 from .base_agent import BaseAgent, AgentMessage
@@ -7,8 +10,8 @@ from .base_agent import BaseAgent, AgentMessage
 class AnalyzerAgent(BaseAgent):
     """Agent responsible for analyzing threats and assessing risk."""
     
-    def __init__(self):
-        super().__init__(name="AnalyzerAgent")
+    def __init__(self, mcp_registry=None, mcp_context=None):
+        super().__init__(name="AnalyzerAgent", mcp_registry=mcp_registry, mcp_context=mcp_context)
         
         self.risk_scores = {
             "critical": 4,
@@ -16,6 +19,30 @@ class AnalyzerAgent(BaseAgent):
             "medium": 2,
             "low": 1,
         }
+        
+        # 注册分析工具
+        self._register_analysis_tools()
+    
+    def _register_analysis_tools(self) -> None:
+        """注册威胁分析相关工具。"""
+        self.register_tool(
+            name="analyzer.analyze_findings",
+            handler=self.analyze_findings,
+            description="Analyze vulnerability findings and calculate risk level",
+            tags=["security", "analysis"],
+        )
+        self.register_tool(
+            name="analyzer.calculate_risk",
+            handler=self.calculate_risk_level,
+            description="Calculate risk level based on findings",
+            tags=["security", "risk"],
+        )
+        self.register_tool(
+            name="analyzer.generate_recommendations",
+            handler=self.generate_recommendations,
+            description="Generate security recommendations based on analysis",
+            tags=["security", "recommendation"],
+        )
     
     def process(self, message: AgentMessage) -> AgentMessage:
         """Analyze findings from Scanner Agent."""
@@ -23,9 +50,9 @@ class AnalyzerAgent(BaseAgent):
         findings = content.get("findings", {})
         original_text = content.get("original_text", "")
         
-        analysis = self._analyze_findings(findings)
-        risk_level = self._calculate_risk_level(analysis)
-        recommendations = self._generate_recommendations(analysis)
+        analysis = self.analyze_findings(findings)
+        risk_level = self.calculate_risk_level(analysis)
+        recommendations = self.generate_recommendations(analysis)
         
         return self.send(
             receiver="ReporterAgent",
@@ -39,8 +66,8 @@ class AnalyzerAgent(BaseAgent):
             }
         )
     
-    def _analyze_findings(self, findings: Dict[str, List[Dict]]) -> Dict[str, Any]:
-        """Analyze vulnerability findings."""
+    def analyze_findings(self, findings: Dict[str, List[Dict]]) -> Dict[str, Any]:
+        """Analyze vulnerability findings. (MCP Tool)"""
         analysis = {
             "total_vulnerabilities": 0,
             "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
@@ -65,36 +92,38 @@ class AnalyzerAgent(BaseAgent):
         
         return analysis
     
-    def _calculate_risk_level(self, analysis: Dict[str, Any]) -> str:
-        """Calculate overall risk level."""
-        by_severity = analysis["by_severity"]
+    def calculate_risk_level(self, analysis: Dict[str, Any]) -> str:
+        """Calculate overall risk level. (MCP Tool)"""
+        by_severity = analysis.get("by_severity", {})
         
-        if by_severity["critical"] > 0:
+        if by_severity.get("critical", 0) > 0:
             return "critical"
-        elif by_severity["high"] > 0:
+        elif by_severity.get("high", 0) > 0:
             return "high"
-        elif by_severity["medium"] > 0:
+        elif by_severity.get("medium", 0) > 0:
             return "medium"
         else:
             return "low"
     
-    def _generate_recommendations(self, analysis: Dict[str, Any]) -> List[str]:
-        """Generate security recommendations."""
+    def generate_recommendations(self, analysis: Dict[str, Any]) -> List[str]:
+        """Generate security recommendations. (MCP Tool)"""
         recommendations = []
         
-        if analysis["by_type"].get("prompt_injection", 0) > 0:
+        by_type = analysis.get("by_type", {})
+        
+        if by_type.get("prompt_injection", 0) > 0:
             recommendations.append("Implement input sanitization for prompt injection")
             recommendations.append("Add output filtering to prevent instruction leakage")
         
-        if analysis["by_type"].get("data_leakage", 0) > 0:
+        if by_type.get("data_leakage", 0) > 0:
             recommendations.append("Remove sensitive data from responses")
             recommendations.append("Implement PII detection and masking")
         
-        if analysis["by_type"].get("toxicity", 0) > 0:
+        if by_type.get("toxicity", 0) > 0:
             recommendations.append("Add toxicity detection filter")
             recommendations.append("Implement content moderation")
         
-        if analysis["by_type"].get("encoding_bypass", 0) > 0:
+        if by_type.get("encoding_bypass", 0) > 0:
             recommendations.append("Detect and block encoding bypass attempts")
             recommendations.append("Normalize input before processing")
         
